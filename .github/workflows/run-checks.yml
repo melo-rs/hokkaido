@@ -8,12 +8,21 @@ jobs:
   check:
     name: Run Checks
     runs-on: ubuntu-latest
-    
+
+    services:
+      firestore:
+        image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+        command: >
+          gcloud emulators firestore start
+          --host-port=0.0.0.0:8080
+        ports:
+          - 8080:8080
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Run Tests
-        run: |
-          export FIRESTORE_EMULATOR_HOST=localhost:8080
-          cargo test
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+        run: cargo test
