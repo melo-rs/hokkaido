@@ -2383,6 +2383,7 @@ dependencies = [
 name = "yuki-rs"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "firestore",
  "futures",

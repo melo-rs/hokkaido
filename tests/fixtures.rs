@@ -12,6 +12,22 @@ const GOOGLE_PROJECT_ID: &str = "sandbox";
 
 static NEXT_DATABASE_ID: AtomicU16 = AtomicU16::new(0);
 
+#[derive(Clone)]
+struct FirestoreTokenSource;
+
+#[async_trait::async_trait]
+impl gcloud_sdk::Source for FirestoreTokenSource {
+    async fn token(
+        &self,
+    ) -> gcloud_sdk::error::Result<gcloud_sdk::Token> {
+        Ok(gcloud_sdk::Token {
+            token_type: "Bearer".to_string(),
+            token: gcloud_sdk::SecretValue::new(b"owner".to_vec()),
+            expiry: chrono::Utc::now() + chrono::Duration::hours(30000),
+        })
+    }
+}
+
 #[rstest::fixture]
 pub async fn fresh_firestore() -> FirestoreDatabase {
     let database_id = NEXT_DATABASE_ID.fetch_add(1, Ordering::Relaxed);
@@ -22,7 +38,7 @@ pub async fn fresh_firestore() -> FirestoreDatabase {
     FirestoreDatabase::with_options_token_source(
         options,
         gcloud_sdk::GCP_DEFAULT_SCOPES.clone(),
-        gcloud_sdk::TokenSourceType::Default,
+        gcloud_sdk::TokenSourceType::ExternalSource(Box::new(FirestoreTokenSource)),
     )
     .await
     .expect("failed to create firestore database")
