@@ -28,4 +28,6 @@ jobs:
       - name: Run Tests
         env:
           FIRESTORE_EMULATOR_HOST: localhost:8080
-        run: cargo test
+        run: >-
+          echo $FIRESTORE_EMULATOR_HOST
+          cargo test
