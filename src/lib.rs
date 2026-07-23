@@ -2,7 +2,7 @@ mod utils;
 
 pub mod datastore;
 pub mod error;
-pub mod machine_id;
+pub mod lease;
 
 pub use error::{Error, Result};
 

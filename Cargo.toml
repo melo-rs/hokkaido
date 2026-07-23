@@ -1,5 +1,5 @@
 [package]
-name = "yuki-rs"
+name = "hokkaido"
 version = "0.1.0"
 edition = "2024"
 
@@ -12,9 +12,3 @@ serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.19"
 tokio = "1.53.0"
 tokio-util = "0.7.18"
-
-[dev-dependencies]
-rstest = "0.26.1"
-async-trait = "0.1.91"
-futures = "0.3.33"
-gcloud-sdk = "0.30.1"
