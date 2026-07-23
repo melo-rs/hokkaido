@@ -1,0 +1,19 @@
+name: Run Checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    name: Run Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run Tests
+        run: |
+          export FIRESTORE_EMULATOR_HOST=localhost:8080
+          cargo test

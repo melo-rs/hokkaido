@@ -19,9 +19,13 @@ pub async fn fresh_firestore() -> FirestoreDatabase {
     let options = FirestoreDatabaseOptions::new(GOOGLE_PROJECT_ID.to_owned())
         .with_database_id(database_id.to_string());
 
-    FirestoreDatabase::with_options(options)
-        .await
-        .expect("failed to create firestore database")
+    FirestoreDatabase::with_options_token_source(
+        options,
+        gcloud_sdk::GCP_DEFAULT_SCOPES.clone(),
+        gcloud_sdk::TokenSourceType::Default,
+    )
+    .await
+    .expect("failed to create firestore database")
 }
 
 #[derive(Serialize, Deserialize)]

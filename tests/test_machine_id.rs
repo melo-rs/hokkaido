@@ -16,7 +16,9 @@ async fn obtain_succeeds(#[future(awt)] seeded_firestore: FirestoreDatabase) {
 
 #[rstest::rstest]
 #[tokio::test]
-async fn obtain_succeeds_with_maximum_concurrent_workers(#[future(awt)] seeded_firestore: FirestoreDatabase) {
+async fn obtain_succeeds_with_maximum_concurrent_workers(
+    #[future(awt)] seeded_firestore: FirestoreDatabase,
+) {
     let futures = (0..1024).map(|_| async {
         MachineID::obtain(seeded_firestore.clone())
             .await

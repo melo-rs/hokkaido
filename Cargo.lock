@@ -2386,6 +2386,7 @@ dependencies = [
  "chrono",
  "firestore",
  "futures",
+ "gcloud-sdk",
  "rand 0.10.2",
  "rstest",
  "rustls",
