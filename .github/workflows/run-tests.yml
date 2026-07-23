@@ -1,0 +1,31 @@
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+
+    services:
+      firestore:
+        image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+        ports:
+          - 8080:8080
+        options: >-
+          --health-cmd "curl -f http://localhost:8080 || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        command: >
+          gcloud emulators firestore start
+          --host-port=0.0.0.0:8080
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run Tests
+        env:
+          FIRESTORE_EMULATOR_HOST: localhost:8080
+        run: cargo test
