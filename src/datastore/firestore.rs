@@ -81,8 +81,7 @@ impl DataStore for Firestore {
                         continue;
                     }
 
-                    fields.lease_until =
-                        utc_now() + TimeDelta::seconds(Self::LEASE_DURATION_SECONDS);
+                    fields.lease_until = lease_until;
 
                     let update_time = Self::revision(&document)?;
 

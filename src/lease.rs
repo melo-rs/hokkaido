@@ -52,6 +52,10 @@ where
                     self.revision = revision;
                   }
                   Err(error) => {
+                    if error.is_lease_lost_error() {
+                      return Err(error)
+                    }
+
                     if self.expires_at - utc_now() < TimeDelta::seconds(Self::LEASE_EXPIRY_THRESHOLD_SECONDS) {
                       return Err(error)
                     }
