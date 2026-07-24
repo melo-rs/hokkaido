@@ -12,12 +12,12 @@ pub trait DataStore {
     fn extend_machine_id_lease(
         &self,
         machine_id: u16,
-        revision: Self::Revision,
+        revision: &Self::Revision,
     ) -> impl Future<Output = Result<(DateTime<Utc>, Self::Revision)>>;
     fn release(
         &self,
         machine_id: u16,
-        revision: Self::Revision,
+        revision: &Self::Revision,
     ) -> impl Future<Output = Result<()>>;
 }
 

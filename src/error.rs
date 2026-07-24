@@ -9,10 +9,7 @@ pub enum Error {
     MachineIDsExhausted,
 
     #[error("The machine ID lease was lost")]
-    MachineIDLost,
-
-    #[error("firestore response did not include the document update time")]
-    FirestoreResponseMissingUpdateTime,
+    LeaseLost,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

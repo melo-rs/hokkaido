@@ -35,8 +35,7 @@ impl Firestore {
     fn revision(document: &FirestoreDocument) -> Result<DateTime<Utc>> {
         let update_time = document
             .update_time
-            .clone()
-            .ok_or(Error::FirestoreResponseMissingUpdateTime)?;
+            .expect("Firestore is expected to always return document update times");
 
         Ok(from_timestamp(update_time)?)
     }
@@ -166,7 +165,7 @@ impl DataStore for Firestore {
     async fn extend_machine_id_lease(
         &self,
         machine_id: u16,
-        revision: Self::Revision,
+        revision: &Self::Revision,
     ) -> Result<(DateTime<Utc>, Self::Revision)> {
         let machine = Machine {
             lease_until: utc_now() + TimeDelta::seconds(Self::LEASE_DURATION_SECONDS),
@@ -188,7 +187,7 @@ impl DataStore for Firestore {
             .update()
             .fields(paths!(Machine::lease_until))
             .in_col(Self::MACHINE_COLLECTION)
-            .precondition(FirestoreWritePrecondition::UpdateTime(revision))
+            .precondition(FirestoreWritePrecondition::UpdateTime(*revision))
             .document(document)
             .execute()
             .await;
@@ -197,7 +196,7 @@ impl DataStore for Firestore {
             Ok(document) => Ok((machine.lease_until, Self::revision(&document)?)),
             Err(firestore_error) => {
                 if Self::is_failed_precondition_error(&firestore_error) {
-                    return Err(Error::MachineIDLost);
+                    return Err(Error::LeaseLost);
                 }
 
                 Err(firestore_error.into())
@@ -205,7 +204,7 @@ impl DataStore for Firestore {
         }
     }
 
-    async fn release(&self, machine_id: u16, revision: Self::Revision) -> Result<()> {
+    async fn release(&self, machine_id: u16, revision: &Self::Revision) -> Result<()> {
         let machine = Machine {
             lease_until: DateTime::UNIX_EPOCH,
         };
@@ -216,7 +215,7 @@ impl DataStore for Firestore {
             .update()
             .fields(paths!(Machine::lease_until))
             .in_col(Self::MACHINE_COLLECTION)
-            .precondition(FirestoreWritePrecondition::UpdateTime(revision))
+            .precondition(FirestoreWritePrecondition::UpdateTime(*revision))
             .document_id(machine_id.to_string())
             .object(&machine)
             .execute::<()>()
@@ -226,7 +225,7 @@ impl DataStore for Firestore {
             Ok(_) => Ok(()),
             Err(firestore_error) => {
                 if Self::is_failed_precondition_error(&firestore_error) {
-                    return Err(Error::MachineIDLost);
+                    return Err(Error::LeaseLost);
                 }
 
                 Err(firestore_error.into())
