@@ -5,10 +5,10 @@ pub enum Error {
     #[error("firestore client error")]
     Firestore(#[from] FirestoreError),
 
-    #[error("there is no unused machine ID")]
-    MachineIDsExhausted,
+    #[error("there are no lease slots available")]
+    LeaseSlotsExhausted,
 
-    #[error("The machine ID lease was lost")]
+    #[error("the lease was lost")]
     LeaseLost,
 }
 

@@ -8,8 +8,8 @@ pub struct Lease<D>
 where
     D: DataStore,
 {
-    id: u16,
-    lasts_until: DateTime<Utc>,
+    lease_id: u16,
+    expires_at: DateTime<Utc>,
     revision: D::Revision,
     datastore: D,
 }
@@ -22,18 +22,18 @@ where
     const LEASE_EXPIRY_THRESHOLD_SECONDS: i64 = 60;
 
     pub async fn new(datastore: D) -> Result<Self> {
-        let (id, lasts_until, revision) = datastore.obtain_machine_id().await?;
+        let (lease_id, expires_at, revision) = datastore.acquire_lease().await?;
 
         Ok(Self {
-            id,
-            lasts_until,
+            lease_id,
+            expires_at,
             revision,
             datastore,
         })
     }
 
     pub async fn maintain(&mut self, cancellation_token: CancellationToken) -> Result<()> {
-        if self.lasts_until < utc_now() {
+        if self.expires_at < utc_now() {
             return Err(Error::LeaseLost);
         }
 
@@ -46,13 +46,13 @@ where
               }
 
               _ = interval.tick() => {
-                match self.datastore.extend_machine_id_lease(self.id, &self.revision).await {
-                  Ok((lasts_until, revision)) => {
-                    self.lasts_until = lasts_until;
+                match self.datastore.renew_lease(self.lease_id, &self.revision).await {
+                  Ok((expires_at, revision)) => {
+                    self.expires_at = expires_at;
                     self.revision = revision;
                   }
                   Err(error) => {
-                    if self.lasts_until - utc_now() < TimeDelta::seconds(Self::LEASE_EXPIRY_THRESHOLD_SECONDS) {
+                    if self.expires_at - utc_now() < TimeDelta::seconds(Self::LEASE_EXPIRY_THRESHOLD_SECONDS) {
                       return Err(error)
                     }
                   }
@@ -64,20 +64,16 @@ where
 
     pub async fn release(self) -> Result<()> {
         let Self {
-            id,
+            lease_id,
             revision,
             datastore,
             ..
         } = self;
 
-        datastore.release(id, &revision).await
+        datastore.release_lease(lease_id, &revision).await
     }
 
-    pub fn as_u16(&self) -> u16 {
-        self.id
-    }
-
-    pub fn as_u64(&self) -> u64 {
-        self.id as u64
+    pub fn id(&self) -> u16 {
+        self.lease_id
     }
 }

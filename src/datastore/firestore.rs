@@ -13,7 +13,7 @@ pub struct Firestore {
 }
 
 impl Firestore {
-    const MACHINE_COLLECTION: &'static str = "machines";
+    const LEASE_COLLECTION: &'static str = "leases";
     const LEASE_DURATION_SECONDS: i64 = 300;
 
     pub fn new(firestore_database: FirestoreDatabase) -> Self {
@@ -42,7 +42,7 @@ impl Firestore {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Machine {
+struct LeaseRecord {
     #[serde(with = "firestore::serialize_as_timestamp")]
     lease_until: DateTime<Utc>,
 }
@@ -50,32 +50,33 @@ struct Machine {
 impl DataStore for Firestore {
     type Revision = DateTime<Utc>;
 
-    async fn obtain_machine_id(&self) -> Result<(u16, DateTime<Utc>, Self::Revision)> {
-        let mut machine_id = random_range(0..1024);
+    async fn acquire_lease(&self) -> Result<(u16, DateTime<Utc>, Self::Revision)> {
+        let mut slot_id = random_range(0..1024);
         let increment = random_range(0..512) * 2 + 1;
 
-        let mut checked = 0;
+        let mut scanned = 0;
 
-        while checked < 1024 {
-            let machine_id_str = machine_id.to_string();
+        while scanned < 1024 {
+            let slot_id_str = slot_id.to_string();
 
             let document = self
                 .database
                 .fluent()
                 .select()
-                .by_id_in(Self::MACHINE_COLLECTION)
-                .one(&machine_id_str)
+                .by_id_in(Self::LEASE_COLLECTION)
+                .one(&slot_id_str)
                 .await?;
 
             let lease_until = utc_now() + TimeDelta::seconds(Self::LEASE_DURATION_SECONDS);
 
             match document {
                 Some(document) => {
-                    let mut fields = FirestoreDatabase::deserialize_doc_to::<Machine>(&document)?;
+                    let mut fields =
+                        FirestoreDatabase::deserialize_doc_to::<LeaseRecord>(&document)?;
 
                     if fields.lease_until >= utc_now() {
-                        checked += 1;
-                        machine_id = (machine_id + increment) & 1023;
+                        scanned += 1;
+                        slot_id = (slot_id + increment) & 1023;
 
                         continue;
                     }
@@ -89,8 +90,8 @@ impl DataStore for Firestore {
                         format!(
                             "{}/{}/{}",
                             self.database.get_documents_path(),
-                            Self::MACHINE_COLLECTION,
-                            machine_id_str,
+                            Self::LEASE_COLLECTION,
+                            slot_id_str,
                         ),
                         &fields,
                     )?;
@@ -99,7 +100,7 @@ impl DataStore for Firestore {
                         .database
                         .fluent()
                         .update()
-                        .in_col(Self::MACHINE_COLLECTION)
+                        .in_col(Self::LEASE_COLLECTION)
                         .precondition(FirestoreWritePrecondition::UpdateTime(update_time))
                         .document(document)
                         .execute()
@@ -107,14 +108,13 @@ impl DataStore for Firestore {
 
                     match result {
                         Ok(document) => {
-                            return Ok((machine_id, lease_until, Self::revision(&document)?));
+                            return Ok((slot_id, lease_until, Self::revision(&document)?));
                         }
                         Err(firestore_error) => {
-                            if let FirestoreError::DatabaseError(ref db_error) = firestore_error
-                                && db_error.public.code == "FailedPrecondition"
+                            if Self::is_failed_precondition_error(&firestore_error)
                             {
-                                checked += 1;
-                                machine_id = (machine_id + increment) & 1023;
+                                scanned += 1;
+                                slot_id = (slot_id + increment) & 1023;
 
                                 continue;
                             }
@@ -125,29 +125,29 @@ impl DataStore for Firestore {
                 }
                 _ => {
                     let document =
-                        FirestoreDatabase::serialize_to_doc("", &Machine { lease_until })?;
+                        FirestoreDatabase::serialize_to_doc("", &LeaseRecord { lease_until })?;
 
                     let result = self
                         .database
                         .fluent()
                         .insert()
-                        .into(Self::MACHINE_COLLECTION)
-                        .document_id(&machine_id_str)
+                        .into(Self::LEASE_COLLECTION)
+                        .document_id(&slot_id_str)
                         .document(document)
                         .execute()
                         .await;
 
                     match result {
                         Ok(document) => {
-                            return Ok((machine_id, lease_until, Self::revision(&document)?));
+                            return Ok((slot_id, lease_until, Self::revision(&document)?));
                         }
                         Err(firestore_error) => {
                             if let FirestoreError::DataConflictError(ref data_conflict_error) =
                                 firestore_error
                                 && data_conflict_error.public.code == "AlreadyExists"
                             {
-                                checked += 1;
-                                machine_id = (machine_id + increment) & 1023;
+                                scanned += 1;
+                                slot_id = (slot_id + increment) & 1023;
 
                                 continue;
                             }
@@ -159,15 +159,15 @@ impl DataStore for Firestore {
             };
         }
 
-        Err(Error::MachineIDsExhausted)
+        Err(Error::LeaseSlotsExhausted)
     }
 
-    async fn extend_machine_id_lease(
+    async fn renew_lease(
         &self,
-        machine_id: u16,
+        lease_id: u16,
         revision: &Self::Revision,
     ) -> Result<(DateTime<Utc>, Self::Revision)> {
-        let machine = Machine {
+        let lease = LeaseRecord {
             lease_until: utc_now() + TimeDelta::seconds(Self::LEASE_DURATION_SECONDS),
         };
 
@@ -175,25 +175,25 @@ impl DataStore for Firestore {
             format!(
                 "{}/{}/{}",
                 self.database.get_documents_path(),
-                Self::MACHINE_COLLECTION,
-                machine_id,
+                Self::LEASE_COLLECTION,
+                lease_id,
             ),
-            &machine,
+            &lease,
         )?;
 
         let result = self
             .database
             .fluent()
             .update()
-            .fields(paths!(Machine::lease_until))
-            .in_col(Self::MACHINE_COLLECTION)
+            .fields(paths!(LeaseRecord::lease_until))
+            .in_col(Self::LEASE_COLLECTION)
             .precondition(FirestoreWritePrecondition::UpdateTime(*revision))
             .document(document)
             .execute()
             .await;
 
         match result {
-            Ok(document) => Ok((machine.lease_until, Self::revision(&document)?)),
+            Ok(document) => Ok((lease.lease_until, Self::revision(&document)?)),
             Err(firestore_error) => {
                 if Self::is_failed_precondition_error(&firestore_error) {
                     return Err(Error::LeaseLost);
@@ -204,8 +204,8 @@ impl DataStore for Firestore {
         }
     }
 
-    async fn release(&self, machine_id: u16, revision: &Self::Revision) -> Result<()> {
-        let machine = Machine {
+    async fn release_lease(&self, lease_id: u16, revision: &Self::Revision) -> Result<()> {
+        let lease = LeaseRecord {
             lease_until: DateTime::UNIX_EPOCH,
         };
 
@@ -213,11 +213,11 @@ impl DataStore for Firestore {
             .database
             .fluent()
             .update()
-            .fields(paths!(Machine::lease_until))
-            .in_col(Self::MACHINE_COLLECTION)
+            .fields(paths!(LeaseRecord::lease_until))
+            .in_col(Self::LEASE_COLLECTION)
             .precondition(FirestoreWritePrecondition::UpdateTime(*revision))
-            .document_id(machine_id.to_string())
-            .object(&machine)
+            .document_id(lease_id.to_string())
+            .object(&lease)
             .execute::<()>()
             .await;
 
