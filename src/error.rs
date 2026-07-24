@@ -10,6 +10,9 @@ pub enum Error {
 
     #[error("the lease was lost")]
     LeaseLost,
+
+    #[error("lease renewal timed out")]
+    LeaseRenewalTimeout,
 }
 
 impl Error {

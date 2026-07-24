@@ -110,8 +110,7 @@ impl DataStore for Firestore {
                             return Ok((slot_id, lease_until, Self::revision(&document)?));
                         }
                         Err(firestore_error) => {
-                            if Self::is_failed_precondition_error(&firestore_error)
-                            {
+                            if Self::is_failed_precondition_error(&firestore_error) {
                                 scanned += 1;
                                 slot_id = (slot_id + increment) & 1023;
 

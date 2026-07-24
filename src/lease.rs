@@ -18,7 +18,9 @@ impl<D> Lease<D>
 where
     D: DataStore,
 {
-    const HEARTBEAT_INTERVAL_SECONDS: u64 = 60;
+    const LEASE_RENEWAL_INTERVAL: Duration = Duration::from_secs(60);
+    const LEASE_RENEWAL_TIMEOUT: Duration = Duration::from_secs(30);
+
     const LEASE_EXPIRY_THRESHOLD_SECONDS: i64 = 60;
 
     pub async fn new(datastore: D) -> Result<Self> {
@@ -33,11 +35,11 @@ where
     }
 
     pub async fn maintain(&mut self, cancellation_token: CancellationToken) -> Result<()> {
-        if self.expires_at < utc_now() {
+        if self.expires_at <= utc_now() {
             return Err(Error::LeaseLost);
         }
 
-        let mut interval = time::interval(Duration::from_secs(Self::HEARTBEAT_INTERVAL_SECONDS));
+        let mut interval = time::interval(Self::LEASE_RENEWAL_INTERVAL);
 
         loop {
             tokio::select! {
@@ -46,7 +48,14 @@ where
               }
 
               _ = interval.tick() => {
-                match self.datastore.renew_lease(self.lease_id, &self.revision).await {
+                let timeout_result = time::timeout(Self::LEASE_RENEWAL_TIMEOUT, self.datastore.renew_lease(self.lease_id, &self.revision)).await;
+
+                let result = match timeout_result {
+                  Ok(result) => result,
+                  Err(_) => return Err(Error::LeaseRenewalTimeout),
+                };
+
+                match result {
                   Ok((expires_at, revision)) => {
                     self.expires_at = expires_at;
                     self.revision = revision;
