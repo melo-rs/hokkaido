@@ -1,7 +1,9 @@
 [package]
 name = "hokkaido"
+description = "Distributed locking for cloud-native environments"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 chrono = "0.4.45"
