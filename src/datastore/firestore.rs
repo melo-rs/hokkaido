@@ -23,13 +23,11 @@ impl Firestore {
     }
 
     fn is_failed_precondition_error(error: &FirestoreError) -> bool {
-        if let FirestoreError::DatabaseError(database_error) = error
-            && database_error.public.code == "FailedPrecondition"
-        {
-            return true;
-        }
+        matches!(error, FirestoreError::DatabaseError(db_error) if db_error.public.code == "FailedPrecondition")
+    }
 
-        false
+    fn is_already_exists_error(error: &FirestoreError) -> bool {
+        matches!(error, FirestoreError::DataConflictError(data_conflict_error) if data_conflict_error.public.code == "AlreadyExists")
     }
 
     fn revision(document: &FirestoreDocument) -> Result<DateTime<Utc>> {
@@ -140,10 +138,7 @@ impl DataStore for Firestore {
                             return Ok((slot_id, lease_until, Self::revision(&document)?));
                         }
                         Err(firestore_error) => {
-                            if let FirestoreError::DataConflictError(ref data_conflict_error) =
-                                firestore_error
-                                && data_conflict_error.public.code == "AlreadyExists"
-                            {
+                            if Self::is_already_exists_error(&firestore_error) {
                                 scanned += 1;
                                 slot_id = (slot_id + increment) & 1023;
 
