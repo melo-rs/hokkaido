@@ -6,13 +6,13 @@ use chrono::{DateTime, Utc};
 pub trait DataStore {
     type Revision;
 
-    fn acquire_lease(&self) -> impl Future<Output = Result<(u16, DateTime<Utc>, Self::Revision)>>;
+    fn create_lease(&self) -> impl Future<Output = Result<(u16, DateTime<Utc>, Self::Revision)>>;
     fn renew_lease(
         &self,
         lease_id: u16,
         revision: &Self::Revision,
     ) -> impl Future<Output = Result<(DateTime<Utc>, Self::Revision)>>;
-    fn release_lease(
+    fn revoke_lease(
         &self,
         lease_id: u16,
         revision: &Self::Revision,

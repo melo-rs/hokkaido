@@ -50,7 +50,7 @@ struct LeaseRecord {
 impl DataStore for Firestore {
     type Revision = DateTime<Utc>;
 
-    async fn acquire_lease(&self) -> Result<(u16, DateTime<Utc>, Self::Revision)> {
+    async fn create_lease(&self) -> Result<(u16, DateTime<Utc>, Self::Revision)> {
         let mut slot_id = random_range(0..1024);
         let increment = random_range(0..512) * 2 + 1;
 
@@ -202,7 +202,7 @@ impl DataStore for Firestore {
         }
     }
 
-    async fn release_lease(&self, lease_id: u16, revision: &Self::Revision) -> Result<()> {
+    async fn revoke_lease(&self, lease_id: u16, revision: &Self::Revision) -> Result<()> {
         let lease = LeaseRecord {
             lease_until: DateTime::UNIX_EPOCH,
         };
